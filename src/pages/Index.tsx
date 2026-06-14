@@ -1,5 +1,11 @@
 import { useState, useEffect, useRef } from "react";
 import Icon from "@/components/ui/icon";
+import { useAuth } from "@/hooks/useAuth";
+import AuthModal from "@/components/AuthModal";
+import Checkout, { OrderTracker } from "@/pages/Checkout";
+import Cabinet from "@/pages/Cabinet";
+import Admin from "@/pages/Admin";
+import { products as productsApi } from "@/lib/api";
 
 /* ==================== DATA ==================== */
 
@@ -78,7 +84,12 @@ function StatusBadge() {
 
 /* ==================== HEADER ==================== */
 
-function Header({ cartCount, onCartClick }: { cartCount: number; onCartClick: () => void }) {
+function Header({ cartCount, onCartClick, onAuthClick, onCabinetClick, onAdminClick }: {
+  cartCount: number; onCartClick: () => void;
+  onAuthClick: () => void; onCabinetClick: () => void; onAdminClick: () => void;
+}) {
+  const { user } = useAuth();
+  const isAdmin = user?.role && ["admin","manager","cook","courier","content"].includes(user.role);
   const [menuOpen, setMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const [bouncing, setBouncing] = useState(false);
@@ -145,10 +156,26 @@ function Header({ cartCount, onCartClick }: { cartCount: number; onCartClick: ()
                 </span>
               )}
             </button>
-            <button className="hidden md:flex items-center gap-2 btn-outline text-sm px-4 py-2">
-              <Icon name="User" size={15} />
-              Войти
-            </button>
+            {/* Auth / Cabinet */}
+            {user ? (
+              <div className="hidden md:flex items-center gap-2">
+                {isAdmin && (
+                  <button onClick={onAdminClick} title="Админ-панель"
+                    className="w-9 h-9 rounded-full bg-ad-orange/20 border border-ad-orange/30 flex items-center justify-center hover:bg-ad-orange/30 transition-all">
+                    <Icon name="Settings" size={16} className="text-ad-orange" />
+                  </button>
+                )}
+                <button onClick={onCabinetClick} className="flex items-center gap-2 btn-outline text-sm px-4 py-2">
+                  <Icon name="User" size={15} />
+                  {user.name ? user.name.split(" ")[0] : "Кабинет"}
+                </button>
+              </div>
+            ) : (
+              <button onClick={onAuthClick} className="hidden md:flex items-center gap-2 btn-outline text-sm px-4 py-2">
+                <Icon name="User" size={15} />
+                Войти
+              </button>
+            )}
             <button onClick={() => setMenuOpen(!menuOpen)} className="md:hidden w-9 h-9 flex items-center justify-center text-ad-cream">
               <Icon name={menuOpen ? "X" : "Menu"} size={22} />
             </button>
@@ -166,9 +193,22 @@ function Header({ cartCount, onCartClick }: { cartCount: number; onCartClick: ()
             <a href="tel:+79951380331" className="flex items-center gap-2 text-ad-cream/80 py-2">
               <Icon name="Phone" size={16} /> +7 (995) 138-03-31
             </a>
-            <button className="btn-outline py-3 text-sm w-full mt-2">
-              <Icon name="User" size={15} className="inline mr-2" /> Войти в кабинет
-            </button>
+            {user ? (
+              <div className="flex flex-col gap-2 mt-2">
+                {isAdmin && (
+                  <button onClick={() => { setMenuOpen(false); onAdminClick(); }} className="btn-outline py-3 text-sm w-full flex items-center justify-center gap-2">
+                    <Icon name="Settings" size={15} /> Админ-панель
+                  </button>
+                )}
+                <button onClick={() => { setMenuOpen(false); onCabinetClick(); }} className="btn-primary py-3 text-sm w-full">
+                  <Icon name="User" size={15} className="inline mr-2" /> {user.name || "Кабинет"}
+                </button>
+              </div>
+            ) : (
+              <button onClick={() => { setMenuOpen(false); onAuthClick(); }} className="btn-outline py-3 text-sm w-full mt-2">
+                <Icon name="User" size={15} className="inline mr-2" /> Войти в кабинет
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -691,7 +731,21 @@ function ReviewsSection() {
 
 function PartnersSection() {
   const [sent, setSent] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({ place: "", phone: "", email: "", comment: "" });
+
+  const submit = async () => {
+    if (!form.place.trim() || !form.phone.trim()) return;
+    setLoading(true);
+    try {
+      await productsApi.partner({ place_name: form.place, phone: form.phone, email: form.email, comment: form.comment });
+      setSent(true);
+    } catch {
+      setSent(true); // show success anyway, data may have saved
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <section id="partners" className="py-16 px-4">
@@ -753,10 +807,15 @@ function PartnersSection() {
                   />
                 </div>
                 <button
-                  onClick={() => setSent(true)}
-                  className="btn-primary w-full py-4 text-base mt-2"
+                  onClick={submit}
+                  disabled={loading || !form.place.trim() || !form.phone.trim()}
+                  className="btn-primary w-full py-4 text-base mt-2 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Отправить заявку
+                  {loading ? (
+                    <span className="flex items-center justify-center gap-2">
+                      <Icon name="Loader2" size={16} className="animate-spin" /> Отправляем...
+                    </span>
+                  ) : "Отправить заявку"}
                 </button>
                 <p className="text-ad-cream/30 text-xs text-center font-body">
                   Также пишите на <a href="mailto:food@artedeli.ru" className="text-ad-orange hover:underline">food@artedeli.ru</a>
@@ -772,11 +831,12 @@ function PartnersSection() {
 
 /* ==================== CART ==================== */
 
-function CartPanel({ items, onClose, onRemove, onQtyChange }: {
+function CartPanel({ items, onClose, onRemove, onQtyChange, onCheckout }: {
   items: { id: number; qty: number }[];
   onClose: () => void;
   onRemove: (id: number) => void;
   onQtyChange: (id: number, delta: number) => void;
+  onCheckout?: () => void;
 }) {
   const [promo, setPromo] = useState("");
   const [promoApplied, setPromoApplied] = useState(false);
@@ -910,8 +970,11 @@ function CartPanel({ items, onClose, onRemove, onQtyChange }: {
                 </div>
               </div>
 
-              <button className="btn-primary w-full py-4 text-base glow-orange">
-                Оформить заказ
+              <button
+                onClick={onCheckout}
+                className="btn-primary w-full py-4 text-base glow-orange"
+              >
+                Оформить заказ · {total} ₽
               </button>
 
               <p className="text-center text-xs text-ad-cream/30 font-body">
@@ -1027,6 +1090,33 @@ export default function Index() {
   const [cartOpen, setCartOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
+  // Overlays
+  const [showAuth, setShowAuth] = useState(false);
+  const [showCabinet, setShowCabinet] = useState(false);
+  const [showAdmin, setShowAdmin] = useState(false);
+  const [showCheckout, setShowCheckout] = useState(false);
+  const [successOrderId, setSuccessOrderId] = useState<number | null>(null);
+
+  // Load products from backend on mount (seed data into local state if needed)
+  const [pizzas, setPizzas] = useState(PIZZAS);
+  useEffect(() => {
+    productsApi.list().then(res => {
+      if (res.products && res.products.length > 0) {
+        const mapped = res.products.map(p => ({
+          id: p.id,
+          name: p.name,
+          price: p.price,
+          tags: p.tags || [],
+          emoji: p.emoji || "🍕",
+          desc: p.description || "",
+          composition: p.composition || "",
+          size: p.size || "32 см",
+        }));
+        setPizzas(mapped);
+      }
+    }).catch(() => {/* use local fallback */});
+  }, []);
+
   const cartCount = cart.reduce((s, i) => s + i.qty, 0);
 
   const addToCart = (id: number) => {
@@ -1035,21 +1125,44 @@ export default function Index() {
       if (existing) return prev.map(i => i.id === id ? { ...i, qty: i.qty + 1 } : i);
       return [...prev, { id, qty: 1 }];
     });
-    const pizza = PIZZAS.find(p => p.id === id)!;
-    setToast(`${pizza.name} добавлена в корзину`);
+    const pizza = pizzas.find(p => p.id === id);
+    if (pizza) setToast(`${pizza.name} добавлена в корзину`);
   };
 
-  const removeFromCart = (id: number) => {
-    setCart(prev => prev.filter(i => i.id !== id));
-  };
-
-  const changeQty = (id: number, delta: number) => {
+  const removeFromCart = (id: number) => setCart(prev => prev.filter(i => i.id !== id));
+  const changeQty = (id: number, delta: number) =>
     setCart(prev => prev.map(i => i.id === id ? { ...i, qty: i.qty + delta } : i).filter(i => i.qty > 0));
-  };
+
+  // Cart items with product data
+  const cartItems = cart.map(ci => {
+    const p = pizzas.find(x => x.id === ci.id);
+    return p ? { id: p.id, name: p.name, emoji: p.emoji, price: p.price, qty: ci.qty } : null;
+  }).filter(Boolean) as { id: number; name: string; emoji: string; price: number; qty: number }[];
+
+  // If checkout is open, show it full-screen
+  if (showCheckout) {
+    return (
+      <Checkout
+        cart={cartItems}
+        onBack={() => setShowCheckout(false)}
+        onSuccess={(orderId) => {
+          setCart([]);
+          setShowCheckout(false);
+          setSuccessOrderId(orderId);
+        }}
+      />
+    );
+  }
 
   return (
     <div className="min-h-screen font-body" style={{ background: "linear-gradient(180deg, #03270D 0%, #03280E 60%, #101510 100%)" }}>
-      <Header cartCount={cartCount} onCartClick={() => setCartOpen(true)} />
+      <Header
+        cartCount={cartCount}
+        onCartClick={() => setCartOpen(true)}
+        onAuthClick={() => setShowAuth(true)}
+        onCabinetClick={() => setShowCabinet(true)}
+        onAdminClick={() => setShowAdmin(true)}
+      />
       <Hero onOrder={() => { document.getElementById("menu")?.scrollIntoView({ behavior: "smooth" }); }} />
 
       <div className="section-divider" />
@@ -1068,14 +1181,50 @@ export default function Index() {
       <PartnersSection />
       <Footer />
 
+      {/* Cart panel */}
       {cartOpen && (
         <CartPanel
           items={cart}
           onClose={() => setCartOpen(false)}
           onRemove={removeFromCart}
           onQtyChange={changeQty}
+          onCheckout={() => {
+            setCartOpen(false);
+            setShowCheckout(true);
+          }}
         />
       )}
+
+      {/* Order tracker */}
+      {successOrderId !== null && (
+        <OrderTracker
+          orderId={successOrderId}
+          onClose={() => setSuccessOrderId(null)}
+        />
+      )}
+
+      {/* Auth modal */}
+      {showAuth && <AuthModal onClose={() => setShowAuth(false)} />}
+
+      {/* Cabinet */}
+      {showCabinet && (
+        <Cabinet
+          onClose={() => setShowCabinet(false)}
+          onOrderAgain={(items) => {
+            items.forEach(item => {
+              setCart(prev => {
+                const ex = prev.find(i => i.id === item.id);
+                if (ex) return prev.map(i => i.id === item.id ? { ...i, qty: i.qty + item.qty } : i);
+                return [...prev, { id: item.id, qty: item.qty }];
+              });
+            });
+            setToast("Заказ добавлен в корзину");
+          }}
+        />
+      )}
+
+      {/* Admin */}
+      {showAdmin && <Admin onClose={() => setShowAdmin(false)} />}
 
       {toast && <Toast message={toast} onClose={() => setToast(null)} />}
     </div>

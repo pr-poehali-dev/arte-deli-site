@@ -1,17 +1,8 @@
 """
-Продукты, категории и промокоды ARTE DELI.
-GET  /products/          — список товаров
-GET  /products/{id}      — один товар
-POST /products/          — создать (admin)
-PUT  /products/{id}      — обновить (admin)
-GET  /products/promos    — список акций/промокодов
-POST /products/check-promo — проверить промокод
-GET  /products/stories   — stories
-POST /products/partner   — заявка партнёра
-POST /products/seed      — заполнить тестовыми данными (admin)
+Продукты, истории и промокоды ARTE DELI.
+Роутинг через path suffix ИЛИ _action в body.
 """
 import json, os
-from datetime import datetime, timezone
 import psycopg2
 
 SCHEMA = os.environ.get("MAIN_DB_SCHEMA", "t_p97754588_arte_deli_site")
@@ -59,9 +50,10 @@ def handler(event, context):
         cur = conn.cursor()
         parts = [p for p in path.split("/") if p]
         last = parts[-1] if parts else ""
+        action = body.get("_action", last)
 
-        # GET /products/promos
-        if method == "GET" and last == "promos":
+        # GET promos
+        if action == "promos" and method == "GET":
             cur.execute(f"""SELECT id,code,title,description,type,value,min_order,
                 is_active,for_new_users,for_birthday,emoji,created_at
                 FROM {SCHEMA}.promos WHERE is_active=TRUE ORDER BY id""")
@@ -70,30 +62,26 @@ def handler(event, context):
                        "for_birthday":r[9],"emoji":r[10],"created_at":str(r[11])} for r in cur.fetchall()]
             return resp(200, {"promos": promos})
 
-        # POST /products/check-promo
-        if method == "POST" and last == "check-promo":
+        # POST check-promo
+        if action == "check-promo":
             code = (body.get("code") or "").strip().upper()
             subtotal = body.get("subtotal", 0)
             if not code:
                 return resp(400, {"error": "Укажите промокод"})
-            cur.execute(f"""SELECT id,type,value,min_order,for_new_users,for_birthday,title
+            cur.execute(f"""SELECT id,type,value,min_order,title
                 FROM {SCHEMA}.promos WHERE code=%s AND is_active=TRUE""", (code,))
             row = cur.fetchone()
             if not row:
                 return resp(404, {"error": "Промокод не найден или недействителен"})
-            p_id, p_type, p_value, p_min, p_new, p_bday, p_title = row
+            p_id, p_type, p_value, p_min, p_title = row
             if subtotal < p_min:
                 return resp(400, {"error": f"Минимальная сумма заказа {p_min} ₽"})
-            discount = 0
-            if p_type == "percent":
-                discount = int(subtotal * p_value / 100)
-            elif p_type == "fixed":
-                discount = p_value
+            discount = int(subtotal * p_value / 100) if p_type == "percent" else (p_value if p_type == "fixed" else 0)
             return resp(200, {"valid": True, "code": code, "title": p_title,
                               "type": p_type, "value": p_value, "discount": discount})
 
-        # GET /products/stories
-        if method == "GET" and last == "stories":
+        # GET stories
+        if action == "stories" and method == "GET":
             cur.execute(f"""SELECT id,title,emoji,bg_gradient,image_url,content,
                 button_text,button_link,is_active,sort_order,views
                 FROM {SCHEMA}.stories WHERE is_active=TRUE ORDER BY sort_order""")
@@ -102,31 +90,29 @@ def handler(event, context):
                         "is_active":r[8],"sort_order":r[9],"views":r[10]} for r in cur.fetchall()]
             return resp(200, {"stories": stories})
 
-        # POST /products/partner — заявка партнёра
-        if method == "POST" and last == "partner":
+        # POST partner
+        if action == "partner":
             place = (body.get("place_name") or body.get("place") or "").strip()
             phone = (body.get("phone") or "").strip()
             if not place or not phone:
                 return resp(400, {"error": "Укажите название заведения и телефон"})
-            cur.execute(f"""INSERT INTO {SCHEMA}.partner_requests (place_name, phone, email, comment)
+            cur.execute(f"""INSERT INTO {SCHEMA}.partner_requests (place_name,phone,email,comment)
                 VALUES (%s,%s,%s,%s) RETURNING id""",
                 (place, phone, body.get("email"), body.get("comment")))
             req_id = cur.fetchone()[0]
             conn.commit()
             return resp(201, {"success": True, "id": req_id})
 
-        # POST /products/seed — заполнить тестовыми данными
-        if method == "POST" and last == "seed":
+        # POST seed (admin only)
+        if action == "seed":
             token = get_token(event)
             user = get_user_by_token(cur, token)
             if not user or user["role"] != "admin":
                 return resp(403, {"error": "Только для администратора"})
-            # Check if already seeded
             cur.execute(f"SELECT COUNT(*) FROM {SCHEMA}.products")
             count = cur.fetchone()[0]
             if count > 0:
                 return resp(200, {"message": f"Уже заполнено ({count} товаров)"})
-            # Seed products
             pizzas = [
                 ('Чикен Барбекю','Курица, соус барбекю, красный лук, маринованные огурчики, сыр моцарелла','Тесто, соус барбекю, куриное филе, красный лук, огурчики маринованные, моцарелла',680,'pizza','32 см','🍗','{popular}',1),
                 ('Салями с Курицей','Салями, куриное филе, болгарский перец, томаты, моцарелла','Тесто, томатный соус, салями, куриное филе, перец болгарский, томаты, моцарелла',540,'pizza','32 см','🍕','{hit}',2),
@@ -145,50 +131,23 @@ def handler(event, context):
                 cur.execute(f"""INSERT INTO {SCHEMA}.products
                     (name,description,composition,price,category,size,emoji,tags,sort_order)
                     VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)""", p)
-            # Seed promos
             cur.execute(f"""INSERT INTO {SCHEMA}.promos (code,title,description,type,value,for_new_users,emoji)
                 VALUES ('ПЕРВЫЙ','Скидка 15%% на первый заказ','Только для новых клиентов','percent',15,TRUE,'✨')""")
             cur.execute(f"""INSERT INTO {SCHEMA}.promos (code,title,description,type,value,for_birthday,emoji)
                 VALUES ('ХЭППИ','Скидка 15%% в День Рождения','Укажи дату рождения в профиле','percent',15,TRUE,'🎂')""")
-            # Seed stories
-            stories_data = [('Акции','🔥','from-orange-600 to-red-700',1),
-                            ('Новинки','🍕','from-green-700 to-green-900',2),
-                            ('Подарки','🎁','from-yellow-600 to-orange-700',3),
-                            ('День рождения','🎂','from-pink-600 to-rose-800',4),
+            stories_data = [('Акции','🔥','from-orange-600 to-red-700',1),('Новинки','🍕','from-green-700 to-green-900',2),
+                            ('Подарки','🎁','from-yellow-600 to-orange-700',3),('День рождения','🎂','from-pink-600 to-rose-800',4),
                             ('Хиты','🏆','from-amber-600 to-yellow-700',5)]
             for s in stories_data:
                 cur.execute(f"INSERT INTO {SCHEMA}.stories (title,emoji,bg_gradient,sort_order) VALUES (%s,%s,%s,%s)", s)
             conn.commit()
             return resp(201, {"success": True, "products": len(pizzas)})
 
-        # GET /products/ — список
-        if method == "GET" and (len(parts) == 0 or last in ("", "products")):
-            qs = event.get("queryStringParameters") or {}
-            category = qs.get("category")
-            if category:
-                cur.execute(f"""SELECT id,name,description,composition,price,category,size,
-                    emoji,image_url,tags,is_available,sort_order
-                    FROM {SCHEMA}.products WHERE is_available=TRUE AND category=%s ORDER BY sort_order""", (category,))
-            else:
-                cur.execute(f"""SELECT id,name,description,composition,price,category,size,
-                    emoji,image_url,tags,is_available,sort_order
-                    FROM {SCHEMA}.products WHERE is_available=TRUE ORDER BY sort_order""")
-            rows = cur.fetchall()
-            products = [{"id":r[0],"name":r[1],"description":r[2],"composition":r[3],
-                         "price":r[4],"category":r[5],"size":r[6],"emoji":r[7],
-                         "image_url":r[8],"tags":list(r[9]) if r[9] else [],
-                         "is_available":r[10],"sort_order":r[11]} for r in rows]
-            return resp(200, {"products": products, "total": len(products)})
-
-        # GET /products/{id}
-        if method == "GET":
-            try:
-                prod_id = int(last)
-            except Exception:
-                return resp(400, {"error": "Некорректный ID"})
+        # GET product by id
+        if method == "GET" and action and action.isdigit():
             cur.execute(f"""SELECT id,name,description,composition,price,category,size,
                 emoji,image_url,tags,is_available,sort_order
-                FROM {SCHEMA}.products WHERE id=%s""", (prod_id,))
+                FROM {SCHEMA}.products WHERE id=%s""", (int(action),))
             row = cur.fetchone()
             if not row:
                 return resp(404, {"error": "Товар не найден"})
@@ -197,7 +156,27 @@ def handler(event, context):
                 "emoji":row[7],"image_url":row[8],"tags":list(row[9]) if row[9] else [],
                 "is_available":row[10],"sort_order":row[11]}})
 
-        # POST /products/ — создать (admin)
+        # PUT product by id (admin)
+        if method == "PUT":
+            token = get_token(event)
+            user = get_user_by_token(cur, token)
+            if not user or user["role"] not in ("admin","manager","content"):
+                return resp(403, {"error": "Нет доступа"})
+            prod_id = body.get("id") or (int(action) if action.isdigit() else None)
+            if not prod_id:
+                return resp(400, {"error": "Нет ID"})
+            allowed = ("name","description","composition","price","category","size","emoji","tags","is_available","sort_order","image_url")
+            fields = [f"{f}=%s" for f in allowed if f in body]
+            vals = [body[f] for f in allowed if f in body]
+            if not fields:
+                return resp(400, {"error": "Нет данных"})
+            fields.append("updated_at=NOW()")
+            vals.append(prod_id)
+            cur.execute(f"UPDATE {SCHEMA}.products SET {', '.join(fields)} WHERE id=%s", vals)
+            conn.commit()
+            return resp(200, {"success": True})
+
+        # POST create product (admin)
         if method == "POST":
             token = get_token(event)
             user = get_user_by_token(cur, token)
@@ -212,38 +191,28 @@ def handler(event, context):
                 VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id""",
                 (name, body.get("description"), body.get("composition"), int(price),
                  body.get("category","pizza"), body.get("size","32 см"),
-                 body.get("emoji","🍕"), body.get("tags",[]),
-                 body.get("sort_order",0), body.get("is_available",True)))
+                 body.get("emoji","🍕"), body.get("tags",[]), body.get("sort_order",0), True))
             prod_id = cur.fetchone()[0]
             conn.commit()
             return resp(201, {"success": True, "id": prod_id})
 
-        # PUT /products/{id}
-        if method == "PUT":
-            token = get_token(event)
-            user = get_user_by_token(cur, token)
-            if not user or user["role"] not in ("admin","manager","content"):
-                return resp(403, {"error": "Нет доступа"})
-            try:
-                prod_id = int(last)
-            except Exception:
-                return resp(400, {"error": "Некорректный ID"})
-            fields = []
-            vals = []
-            for f in ("name","description","composition","price","category","size","emoji","tags","is_available","sort_order","image_url"):
-                if f in body:
-                    fields.append(f"{f}=%s")
-                    vals.append(body[f])
-            if not fields:
-                return resp(400, {"error": "Нет данных для обновления"})
-            fields.append("updated_at=NOW()")
-            vals.append(prod_id)
-            cur.execute(f"UPDATE {SCHEMA}.products SET {', '.join(fields)} WHERE id=%s RETURNING id", vals)
-            if not cur.fetchone():
-                return resp(404, {"error": "Товар не найден"})
-            conn.commit()
-            return resp(200, {"success": True})
+        # Default GET: list products
+        qs = event.get("queryStringParameters") or {}
+        category = qs.get("category")
+        if category:
+            cur.execute(f"""SELECT id,name,description,composition,price,category,size,
+                emoji,image_url,tags,is_available,sort_order
+                FROM {SCHEMA}.products WHERE is_available=TRUE AND category=%s ORDER BY sort_order""", (category,))
+        else:
+            cur.execute(f"""SELECT id,name,description,composition,price,category,size,
+                emoji,image_url,tags,is_available,sort_order
+                FROM {SCHEMA}.products WHERE is_available=TRUE ORDER BY sort_order""")
+        rows = cur.fetchall()
+        products = [{"id":r[0],"name":r[1],"description":r[2],"composition":r[3],
+                     "price":r[4],"category":r[5],"size":r[6],"emoji":r[7],
+                     "image_url":r[8],"tags":list(r[9]) if r[9] else [],
+                     "is_available":r[10],"sort_order":r[11]} for r in rows]
+        return resp(200, {"products": products, "total": len(products)})
 
-        return resp(404, {"error": "Not found"})
     finally:
         conn.close()

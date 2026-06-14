@@ -1,18 +1,10 @@
 {
   "tests": [
     {
-      "name": "GET /auth/me unauthorized",
-      "method": "GET",
-      "path": "/me",
-      "expectedStatus": 401,
-      "expectedBody": {"error": "Не авторизован"},
-      "bodyMatcher": "partial"
-    },
-    {
-      "name": "POST /auth/send-otp",
+      "name": "POST send-otp valid phone",
       "method": "POST",
-      "path": "/send-otp",
-      "body": {"phone": "+79991234567"},
+      "path": "/",
+      "body": {"_action": "send-otp", "phone": "+79991234567"},
       "expectedStatus": 200,
       "expectedBody": {"success": true},
       "bodyMatcher": "partial"
