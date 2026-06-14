@@ -1,10 +1,12 @@
 import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { orders as ordersApi, auth as authApi, Order } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
 import Icon from "@/components/ui/icon";
 
 const STATUS_COLOR: Record<string, string> = {
-  processing: "status-soon", accepted: "status-open", delivering: "status-open",
+  processing: "status-soon", accepted: "bg-blue-500/20 text-blue-300 border-blue-500/30",
+  delivering: "bg-purple-500/20 text-purple-300 border-purple-500/30",
   delivered: "status-open", cancelled: "status-closed",
 };
 const STATUS_EMOJI: Record<string, string> = {
@@ -24,6 +26,8 @@ export default function Cabinet({ onClose, onOrderAgain }: Props) {
   const [profile, setProfile] = useState({ name: user?.name || "", email: user?.email || "", birth_date: user?.birth_date || "" });
   const [profileSaved, setProfileSaved] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [cancelConfirm, setCancelConfirm] = useState<number | null>(null);
+  const [cancelling, setCancelling] = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -35,6 +39,16 @@ export default function Cabinet({ onClose, onOrderAgain }: Props) {
     };
     load();
   }, []);
+
+  const handleCancel = async (orderId: number) => {
+    setCancelling(true);
+    try {
+      await ordersApi.cancel(orderId);
+      setOrderList(prev => prev.map(o => o.id === orderId ? { ...o, status: "cancelled" as const, status_label: "Отмена" } : o));
+    } catch { /* ignore */ }
+    setCancelling(false);
+    setCancelConfirm(null);
+  };
 
   const saveProfile = async () => {
     setSaving(true);
@@ -54,6 +68,7 @@ export default function Cabinet({ onClose, onOrderAgain }: Props) {
   ] as const;
 
   return (
+    <>
     <div className="fixed inset-0 z-[200] flex" onClick={onClose}>
       <div className="flex-1" />
       <div
@@ -138,20 +153,30 @@ export default function Cabinet({ onClose, onOrderAgain }: Props) {
                           <div className="text-xs text-ad-cream/40 font-body">+ ещё {order.items.length - 3}</div>
                         )}
                       </div>
-                      <div className="flex items-center justify-between">
+                      <div className="flex items-center justify-between flex-wrap gap-2">
                         <span className="font-display font-black text-ad-orange">{order.total} ₽</span>
-                        {order.status === "delivered" && (
-                          <button
-                            onClick={() => {
-                              const items = order.items.map(i => ({ id: i.product_id, name: i.name, emoji: i.emoji, price: i.price, qty: i.quantity }));
-                              onOrderAgain(items);
-                              onClose();
-                            }}
-                            className="flex items-center gap-1.5 text-xs btn-outline px-3 py-1.5"
-                          >
-                            <Icon name="RotateCcw" size={12} /> Повторить
-                          </button>
-                        )}
+                        <div className="flex gap-2">
+                          {order.status === "processing" && (
+                            <button
+                              onClick={() => setCancelConfirm(order.id)}
+                              className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full border border-red-500/30 text-red-400 hover:bg-red-500/10 transition-all"
+                            >
+                              <Icon name="X" size={11} /> Отменить
+                            </button>
+                          )}
+                          {order.status === "delivered" && (
+                            <button
+                              onClick={() => {
+                                const items = order.items.map(i => ({ id: i.product_id, name: i.name, emoji: i.emoji, price: i.price, qty: i.quantity }));
+                                onOrderAgain(items);
+                                onClose();
+                              }}
+                              className="flex items-center gap-1.5 text-xs btn-outline px-3 py-1.5"
+                            >
+                              <Icon name="RotateCcw" size={12} /> Повторить
+                            </button>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -239,5 +264,31 @@ export default function Cabinet({ onClose, onOrderAgain }: Props) {
         </div>
       </div>
     </div>
+
+    {cancelConfirm !== null && createPortal(
+      <div className="fixed inset-0 z-[400] modal-overlay flex items-center justify-center p-4">
+        <div className="w-full max-w-sm bg-gradient-to-b from-[#0d2010] to-[#071507] rounded-3xl border border-red-500/20 p-6 space-y-4 animate-scale-in">
+          <div className="text-center">
+            <div className="text-4xl mb-3">⚠️</div>
+            <h3 className="font-display font-black text-xl text-ad-cream">Отменить заказ?</h3>
+            <p className="text-ad-cream/60 text-sm font-body mt-2">
+              Заказ №{cancelConfirm} будет отменён. Это действие необратимо.
+            </p>
+          </div>
+          <div className="flex gap-3">
+            <button onClick={() => setCancelConfirm(null)} className="btn-outline flex-1 py-3 text-sm">Назад</button>
+            <button
+              onClick={() => handleCancel(cancelConfirm)}
+              disabled={cancelling}
+              className="flex-1 py-3 text-sm font-display font-bold rounded-full bg-red-500 text-white hover:bg-red-600 transition-colors disabled:opacity-50"
+            >
+              {cancelling ? <Icon name="Loader2" size={16} className="animate-spin inline" /> : "Да, отменить"}
+            </button>
+          </div>
+        </div>
+      </div>,
+      document.body
+    )}
+    </>
   );
 }

@@ -5,7 +5,10 @@ import AuthModal from "@/components/AuthModal";
 import Checkout, { OrderTracker } from "@/pages/Checkout";
 import Cabinet from "@/pages/Cabinet";
 import Admin from "@/pages/Admin";
-import { products as productsApi } from "@/lib/api";
+import StoriesViewer from "@/components/StoriesViewer";
+import ProductModal from "@/components/ProductModal";
+import { Story, products as productsApi } from "@/lib/api";
+import { useSiteSettings } from "@/hooks/useSiteSettings";
 
 /* ==================== DATA ==================== */
 
@@ -29,14 +32,6 @@ const PROMOS = [
   { id: 2, icon: "🎁", title: "Пицца в подарок", desc: "Закажи 2 пиццы — получи «Ветчина Грибы» в подарок", code: null, color: "from-green-500/10 to-green-600/5", border: "border-green-500/20" },
   { id: 3, icon: "🎂", title: "Скидка 15% в День Рождения", desc: "Промокод ХЭППИ — укажи дату рождения в профиле", code: "ХЭППИ", color: "from-pink-500/10 to-pink-600/5", border: "border-pink-500/20" },
   { id: 4, icon: "🍕", title: "Сет 3 пиццы за 1599 ₽", desc: "Чикен Барбекю + Салями с Курицей + Ветчина Грибы", code: null, color: "from-yellow-500/10 to-yellow-600/5", border: "border-yellow-500/20" },
-];
-
-const STORIES = [
-  { id: 1, emoji: "🔥", title: "Акции", bg: "from-orange-600 to-red-700" },
-  { id: 2, emoji: "🍕", title: "Новинки", bg: "from-green-700 to-green-900" },
-  { id: 3, emoji: "🎁", title: "Подарки", bg: "from-yellow-600 to-orange-700" },
-  { id: 4, emoji: "🎂", title: "День рождения", bg: "from-pink-600 to-rose-800" },
-  { id: 5, emoji: "🏆", title: "Хиты", bg: "from-amber-600 to-yellow-700" },
 ];
 
 const REVIEWS = [
@@ -84,9 +79,10 @@ function StatusBadge() {
 
 /* ==================== HEADER ==================== */
 
-function Header({ cartCount, onCartClick, onAuthClick, onCabinetClick, onAdminClick }: {
+function Header({ cartCount, onCartClick, onAuthClick, onCabinetClick, onAdminClick, phone, vkUrl }: {
   cartCount: number; onCartClick: () => void;
   onAuthClick: () => void; onCabinetClick: () => void; onAdminClick: () => void;
+  phone?: string; vkUrl?: string;
 }) {
   const { user } = useAuth();
   const isAdmin = user?.role && ["admin","manager","cook","courier","content"].includes(user.role);
@@ -131,17 +127,16 @@ function Header({ cartCount, onCartClick, onAuthClick, onCabinetClick, onAdminCl
               <span>🔥</span> Акции
             </a>
             <a href="#delivery" className="text-ad-cream/70 hover:text-ad-cream text-sm font-medium font-body transition-colors">Доставка</a>
-            <a href="#partners" className="text-ad-cream/70 hover:text-ad-orange text-sm font-medium font-body transition-colors">Партнёрам</a>
           </nav>
 
           {/* Right */}
           <div className="flex items-center gap-2 md:gap-3">
             <StatusBadge />
-            <a href="tel:+79951380331" className="hidden md:flex items-center gap-2 text-ad-cream/80 hover:text-ad-cream transition-colors text-sm font-medium">
+            <a href={`tel:${(phone || "+7 (995) 138-03-31").replace(/\D/g, "")}`} className="hidden md:flex items-center gap-2 text-ad-cream/80 hover:text-ad-cream transition-colors text-sm font-medium">
               <Icon name="Phone" size={15} />
-              <span>+7 (995) 138-03-31</span>
+              <span>{phone || "+7 (995) 138-03-31"}</span>
             </a>
-            <a href="https://vk.com/artedeli" target="_blank" rel="noopener noreferrer"
+            <a href={vkUrl || "https://vk.com/artedeli"} target="_blank" rel="noopener noreferrer"
               className="w-9 h-9 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 flex items-center justify-center transition-all hover:scale-105 text-ad-cream text-sm font-bold">
               VK
             </a>
@@ -189,9 +184,8 @@ function Header({ cartCount, onCartClick, onAuthClick, onCabinetClick, onAdminCl
             <a href="#menu" onClick={() => setMenuOpen(false)} className="text-ad-cream/80 font-medium py-2 border-b border-white/5">Меню</a>
             <a href="#promos" onClick={() => setMenuOpen(false)} className="text-ad-orange font-semibold py-2 border-b border-white/5 flex items-center gap-2">🔥 Акции</a>
             <a href="#delivery" onClick={() => setMenuOpen(false)} className="text-ad-cream/80 font-medium py-2 border-b border-white/5">Доставка</a>
-            <a href="#partners" onClick={() => setMenuOpen(false)} className="text-ad-cream/80 font-medium py-2 border-b border-white/5">Партнёрам</a>
-            <a href="tel:+79951380331" className="flex items-center gap-2 text-ad-cream/80 py-2">
-              <Icon name="Phone" size={16} /> +7 (995) 138-03-31
+            <a href={`tel:${(phone || "+7 (995) 138-03-31").replace(/\D/g, "")}`} className="flex items-center gap-2 text-ad-cream/80 py-2">
+              <Icon name="Phone" size={16} /> {phone || "+7 (995) 138-03-31"}
             </a>
             {user ? (
               <div className="flex flex-col gap-2 mt-2">
@@ -218,7 +212,10 @@ function Header({ cartCount, onCartClick, onAuthClick, onCabinetClick, onAdminCl
 
 /* ==================== HERO ==================== */
 
-function Hero({ onOrder }: { onOrder: () => void }) {
+function Hero({ onOrder, settings }: {
+  onOrder: () => void;
+  settings: { hero_image_url: string; hero_title: string; hero_subtitle: string; hero_btn1: string; hero_btn2: string };
+}) {
   return (
     <section className="relative min-h-screen flex items-center overflow-hidden bg-hero-gradient">
       <div className="absolute top-1/4 right-0 w-[600px] h-[600px] rounded-full opacity-20 blur-3xl"
@@ -235,23 +232,19 @@ function Hero({ onOrder }: { onOrder: () => void }) {
             </div>
 
             <h1 className="font-display font-black text-4xl sm:text-5xl lg:text-6xl xl:text-7xl leading-[1.05] animate-fade-in-up delay-100">
-              <span className="text-ad-cream">Горячая</span>
-              <br />
-              <span className="text-glow" style={{ color: "#FF7A00" }}>пицца</span>
-              <br />
-              <span className="text-ad-cream">ARTE DELI</span>
+              <span className="text-ad-cream">{settings.hero_title || "Горячая пицца ARTE DELI"}</span>
             </h1>
 
             <p className="text-ad-cream/65 text-lg sm:text-xl leading-relaxed max-w-md animate-fade-in-up delay-200 font-body">
-              Сочная, ароматная, прямо из печи — доставим горячей до вашей двери ежедневно с 10:00 до 22:00
+              {settings.hero_subtitle || "Сочная, ароматная, прямо из печи — доставим горячей до вашей двери ежедневно с 10:00 до 22:00"}
             </p>
 
             <div className="flex flex-wrap gap-4 animate-fade-in-up delay-300">
               <button onClick={onOrder} className="btn-primary px-8 py-4 text-base glow-orange">
-                Заказать сейчас
+                {settings.hero_btn1 || "Заказать сейчас"}
               </button>
               <a href="#promos" className="btn-outline px-8 py-4 text-base">
-                Смотреть акции 🔥
+                {settings.hero_btn2 || "Смотреть акции 🔥"}
               </a>
             </div>
 
@@ -274,8 +267,8 @@ function Hero({ onOrder }: { onOrder: () => void }) {
               style={{ background: "radial-gradient(circle, #FF7A00, transparent 70%)" }} />
             <div className="relative w-full max-w-[480px] aspect-square">
               <img
-                src="https://cdn.poehali.dev/projects/2f8cc4dc-0c5c-4aba-b2ad-7ae7a8eb6cb1/files/45930abd-2f75-4f8a-8333-be6fa88839bc.jpg"
-                alt="Горячая пицца ARTE DELI"
+                src={settings.hero_image_url || "https://cdn.poehali.dev/projects/2f8cc4dc-0c5c-4aba-b2ad-7ae7a8eb6cb1/files/45930abd-2f75-4f8a-8333-be6fa88839bc.jpg"}
+                alt={settings.hero_title || "Горячая пицца ARTE DELI"}
                 className="w-full h-full object-cover rounded-full animate-float"
                 style={{ boxShadow: "0 0 80px rgba(255,122,0,0.35), 0 0 160px rgba(255,122,0,0.15)" }}
               />
@@ -285,16 +278,11 @@ function Hero({ onOrder }: { onOrder: () => void }) {
               </div>
               <div className="absolute bottom-10 left-0 card-premium rounded-2xl px-4 py-3 shadow-xl animate-fade-in-up delay-600">
                 <div className="text-xs text-ad-gold font-display font-bold">🚴 Доставка</div>
-                <div className="text-sm font-black font-display text-ad-cream">Ежедневно</div>
-                <div className="text-xs text-ad-cream/60">10:00 — 22:00</div>
+                <div className="text-sm font-black font-display text-ad-cream">~45 минут</div>
               </div>
             </div>
           </div>
         </div>
-      </div>
-
-      <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 opacity-40 animate-bounce">
-        <Icon name="ChevronDown" size={20} className="text-ad-cream" />
       </div>
     </section>
   );
@@ -303,24 +291,43 @@ function Hero({ onOrder }: { onOrder: () => void }) {
 /* ==================== STORIES ==================== */
 
 function Stories() {
-  const [active, setActive] = useState<number | null>(null);
+  const [stories, setStories] = useState<Story[]>([]);
+  const [viewerOpen, setViewerOpen] = useState(false);
+  const [viewerIdx, setViewerIdx] = useState(0);
+
+  useEffect(() => {
+    productsApi.stories().then(res => {
+      if (res.stories?.length) setStories(res.stories.filter(s => s.is_active));
+    }).catch(() => {
+      // fallback to static
+      setStories([
+        { id: 1, title: "Акции", emoji: "🔥", bg: "from-orange-600 to-red-700", image_url: null, content: "Скидки и акции ARTE DELI", button_text: "Смотреть", button_link: null, is_active: true, sort_order: 1, views: 0 },
+        { id: 2, title: "Новинки", emoji: "🍕", bg: "from-green-700 to-green-900", image_url: null, content: "Новые позиции в меню", button_text: "В меню", button_link: null, is_active: true, sort_order: 2, views: 0 },
+        { id: 3, title: "Подарки", emoji: "🎁", bg: "from-yellow-600 to-orange-700", image_url: null, content: "При заказе 2 пицц — третья в подарок!", button_text: "Заказать", button_link: null, is_active: true, sort_order: 3, views: 0 },
+        { id: 4, title: "День рождения", emoji: "🎂", bg: "from-pink-600 to-rose-800", image_url: null, content: "Скидка 15% в день рождения. Промокод ХЭППИ", button_text: "Активировать", button_link: null, is_active: true, sort_order: 4, views: 0 },
+        { id: 5, title: "Хиты", emoji: "🏆", bg: "from-amber-600 to-yellow-700", image_url: null, content: "Самые популярные пиццы ARTE DELI", button_text: "Выбрать", button_link: null, is_active: true, sort_order: 5, views: 0 },
+      ]);
+    });
+  }, []);
+
+  if (!stories.length) return null;
 
   return (
     <section className="py-8 px-4">
       <div className="max-w-7xl mx-auto">
         <div className="flex gap-4 overflow-x-auto no-scrollbar pb-2">
-          {STORIES.map((s, i) => (
+          {stories.map((s, i) => (
             <div
               key={s.id}
               className="flex flex-col items-center gap-2 cursor-pointer flex-shrink-0 group"
-              style={{ animationDelay: `${i * 0.08}s` }}
-              onClick={() => setActive(s.id)}
+              onClick={() => { setViewerIdx(i); setViewerOpen(true); }}
             >
               <div className="story-ring w-16 h-16 group-hover:scale-105 transition-transform duration-200">
                 <div className="story-ring-inner w-full h-full flex items-center justify-center">
-                  <div className={`w-full h-full rounded-full bg-gradient-to-br ${s.bg} flex items-center justify-center text-2xl`}>
-                    {s.emoji}
-                  </div>
+                  {s.image_url
+                    ? <img src={s.image_url} alt={s.title} className="w-full h-full rounded-full object-cover" />
+                    : <div className={`w-full h-full rounded-full bg-gradient-to-br ${s.bg} flex items-center justify-center text-2xl`}>{s.emoji}</div>
+                  }
                 </div>
               </div>
               <span className="text-xs text-ad-cream/70 font-body text-center whitespace-nowrap">{s.title}</span>
@@ -328,41 +335,12 @@ function Stories() {
           ))}
         </div>
       </div>
-
-      {active !== null && (
-        <div
-          className="fixed inset-0 z-50 modal-overlay flex items-center justify-center p-4"
-          onClick={() => setActive(null)}
-        >
-          <div
-            className="relative w-full max-w-sm aspect-[9/16] rounded-3xl overflow-hidden animate-scale-in"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {(() => {
-              const s = STORIES.find(x => x.id === active)!;
-              return (
-                <div className={`w-full h-full bg-gradient-to-br ${s.bg} flex flex-col p-6`}>
-                  <div className="flex gap-1 mb-4">
-                    {STORIES.map((st) => (
-                      <div key={st.id} className="story-progress-bar h-0.5 flex-1">
-                        <div className="story-progress-fill" style={{ width: st.id <= active ? "100%" : "0%" }} />
-                      </div>
-                    ))}
-                  </div>
-                  <button onClick={() => setActive(null)} className="absolute top-4 right-4 w-8 h-8 rounded-full bg-black/30 flex items-center justify-center">
-                    <Icon name="X" size={16} className="text-white" />
-                  </button>
-                  <div className="flex-1 flex flex-col items-center justify-center gap-4">
-                    <div className="text-6xl">{s.emoji}</div>
-                    <div className="text-white text-2xl font-black font-display text-center">{s.title}</div>
-                    <p className="text-white/80 text-center font-body">Смотри актуальные предложения ARTE DELI</p>
-                  </div>
-                  <button className="btn-primary w-full py-4 text-base">Смотреть предложение</button>
-                </div>
-              );
-            })()}
-          </div>
-        </div>
+      {viewerOpen && (
+        <StoriesViewer
+          stories={stories}
+          initialIndex={viewerIdx}
+          onClose={() => setViewerOpen(false)}
+        />
       )}
     </section>
   );
@@ -370,9 +348,12 @@ function Stories() {
 
 /* ==================== PIZZA CARD ==================== */
 
-function PizzaCard({ pizza, onAdd }: { pizza: typeof PIZZAS[0]; onAdd: (id: number) => void }) {
+function PizzaCard({ pizza, onAdd, onOpenDetail }: {
+  pizza: typeof PIZZAS[0];
+  onAdd: (id: number) => void;
+  onOpenDetail: (pizza: typeof PIZZAS[0]) => void;
+}) {
   const [added, setAdded] = useState(false);
-  const [showDetail, setShowDetail] = useState(false);
 
   const handleAdd = (e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
@@ -383,117 +364,54 @@ function PizzaCard({ pizza, onAdd }: { pizza: typeof PIZZAS[0]; onAdd: (id: numb
   };
 
   return (
-    <>
-      <div
-        className="pizza-card bg-dark-card rounded-3xl overflow-hidden cursor-pointer relative group"
-        onClick={() => setShowDetail(true)}
-      >
-        {pizza.tags.length > 0 && (
-          <div className="absolute top-3 left-3 z-10 flex gap-1 flex-wrap">
-            {pizza.tags.map(t => (
-              <span key={t} className={t === "hot" ? "tag-hot" : t === "new" ? "tag-new" : "tag-popular"}>
-                {t === "hot" ? "🔥 Острая" : t === "new" ? "✨ Новинка" : t === "popular" ? "⭐ Хит" : "👑 Классика"}
-              </span>
-            ))}
-          </div>
-        )}
-
-        <div className="relative h-44 bg-gradient-to-br from-ad-dark to-ad-darker overflow-hidden">
-          <div className="absolute inset-0 flex items-center justify-center text-7xl pizza-img">
-            {pizza.emoji}
-          </div>
-          <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
-        </div>
-
-        <div className="p-4 space-y-3">
-          <div>
-            <h3 className="font-display font-bold text-ad-cream text-base leading-tight">{pizza.name}</h3>
-            <p className="text-ad-cream/50 text-xs mt-1 font-body leading-relaxed line-clamp-2">{pizza.desc}</p>
-          </div>
-          <div className="text-ad-cream/40 text-xs font-body flex items-center gap-1">
-            <Icon name="Ruler" size={11} className="text-ad-gold" />
-            {pizza.size} · тонкое тесто
-          </div>
-          <div className="flex items-center justify-between pt-1">
-            <span className="font-display font-black text-xl text-ad-cream">{pizza.price} ₽</span>
-            <button
-              onClick={(e) => handleAdd(e)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-bold font-display transition-all duration-300 ${
-                added ? "bg-green-500 text-white scale-95" : "btn-primary"
-              }`}
-            >
-              {added ? (
-                <><Icon name="Check" size={14} /> Добавлено</>
-              ) : (
-                <><Icon name="Plus" size={14} /> В корзину</>
-              )}
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {showDetail && (
-        <div className="fixed inset-0 z-50 modal-overlay flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={() => setShowDetail(false)}>
-          <div
-            className="w-full max-w-md bg-gradient-to-b from-[#0d2010] to-[#071507] rounded-t-3xl sm:rounded-3xl p-6 space-y-5 animate-fade-in-up border border-ad-orange/10"
-            onClick={e => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 flex-wrap">
-                {pizza.tags.map(t => (
-                  <span key={t} className={t === "hot" ? "tag-hot" : t === "new" ? "tag-new" : "tag-popular"}>
-                    {t === "hot" ? "🔥 Острая" : t === "new" ? "✨ Новинка" : "⭐ Хит"}
-                  </span>
-                ))}
-              </div>
-              <button onClick={() => setShowDetail(false)} className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center">
-                <Icon name="X" size={16} className="text-ad-cream/60" />
-              </button>
-            </div>
-
-            <div className="text-center">
-              <div className="text-7xl mb-2">{pizza.emoji}</div>
-              <h2 className="font-display font-black text-2xl text-ad-cream">{pizza.name}</h2>
-              <p className="text-ad-cream/60 text-sm mt-2 font-body leading-relaxed">{pizza.desc}</p>
-            </div>
-
-            <div className="bg-white/3 rounded-2xl p-4 space-y-2">
-              <div className="flex items-center gap-2 text-sm">
-                <Icon name="Ruler" size={14} className="text-ad-gold" />
-                <span className="text-ad-cream/60 font-body">Размер:</span>
-                <span className="text-ad-cream font-semibold">{pizza.size}</span>
-              </div>
-              <div className="flex items-center gap-2 text-sm">
-                <Icon name="Layers" size={14} className="text-ad-gold" />
-                <span className="text-ad-cream/60 font-body">Тесто:</span>
-                <span className="text-ad-cream font-semibold">Тонкое</span>
-              </div>
-            </div>
-
-            <div>
-              <div className="text-xs font-bold text-ad-gold font-display mb-2 uppercase tracking-wider">Состав</div>
-              <p className="text-ad-cream/65 text-sm font-body leading-relaxed">{pizza.composition}</p>
-            </div>
-
-            <div className="flex items-center justify-between pt-2">
-              <span className="font-display font-black text-3xl text-ad-cream">{pizza.price} ₽</span>
-              <button
-                onClick={() => { handleAdd(); setShowDetail(false); }}
-                className="btn-primary px-8 py-3 text-base"
-              >
-                В корзину
-              </button>
-            </div>
-          </div>
+    <div
+      className="pizza-card bg-dark-card rounded-3xl overflow-hidden cursor-pointer relative group"
+      onClick={() => onOpenDetail(pizza)}
+    >
+      {pizza.tags.length > 0 && (
+        <div className="absolute top-3 left-3 z-10 flex gap-1 flex-wrap">
+          {pizza.tags.map(t => (
+            <span key={t} className={t === "hot" ? "tag-hot" : t === "new" ? "tag-new" : "tag-popular"}>
+              {t === "hot" ? "🔥 Острая" : t === "new" ? "✨ Новинка" : t === "popular" ? "⭐ Хит" : "👑 Классика"}
+            </span>
+          ))}
         </div>
       )}
-    </>
+      <div className="relative h-44 bg-gradient-to-br from-ad-dark to-ad-darker overflow-hidden">
+        <div className="absolute inset-0 flex items-center justify-center text-7xl pizza-img">{pizza.emoji}</div>
+        <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
+      </div>
+      <div className="p-4 space-y-3">
+        <div>
+          <h3 className="font-display font-bold text-ad-cream text-base leading-tight">{pizza.name}</h3>
+          <p className="text-ad-cream/50 text-xs mt-1 font-body leading-relaxed line-clamp-2">{pizza.desc}</p>
+        </div>
+        <div className="text-ad-cream/40 text-xs font-body flex items-center gap-1">
+          <Icon name="Ruler" size={11} className="text-ad-gold" />
+          {pizza.size} · тонкое тесто
+        </div>
+        <div className="flex items-center justify-between pt-1">
+          <span className="font-display font-black text-xl text-ad-cream">{pizza.price} ₽</span>
+          <button
+            onClick={(e) => handleAdd(e)}
+            className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-bold font-display transition-all duration-300 ${
+              added ? "bg-green-500 text-white scale-95" : "btn-primary"
+            }`}
+          >
+            {added ? (<><Icon name="Check" size={14} /> Добавлено</>) : (<><Icon name="Plus" size={14} /> В корзину</>)}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
 /* ==================== MENU ==================== */
 
-function MenuSection({ onAdd }: { onAdd: (id: number) => void }) {
+function MenuSection({ onAdd, onOpenDetail }: {
+  onAdd: (id: number) => void;
+  onOpenDetail: (pizza: typeof PIZZAS[0]) => void;
+}) {
   return (
     <section id="menu" className="py-16 px-4">
       <div className="max-w-7xl mx-auto">
@@ -508,11 +426,10 @@ function MenuSection({ onAdd }: { onAdd: (id: number) => void }) {
             <span>Нажми на карточку — подробнее</span>
           </div>
         </div>
-
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-5">
           {PIZZAS.map((pizza, i) => (
             <div key={pizza.id} className="animate-fade-in-up" style={{ animationDelay: `${i * 0.05}s` }}>
-              <PizzaCard pizza={pizza} onAdd={onAdd} />
+              <PizzaCard pizza={pizza} onAdd={onAdd} onOpenDetail={onOpenDetail} />
             </div>
           ))}
         </div>
@@ -572,7 +489,10 @@ function PromoSection() {
 
 /* ==================== MOOD PIZZA ==================== */
 
-function MoodPizzaSection({ onAdd }: { onAdd: (id: number) => void }) {
+function MoodPizzaSection({ onAdd, onOpenDetail }: {
+  onAdd: (id: number) => void;
+  onOpenDetail: (pizza: typeof PIZZAS[0]) => void;
+}) {
   const moods = [
     { emoji: "😄", label: "Весёлое", pizzas: [1, 11, 3] },
     { emoji: "🔥", label: "Острое", pizzas: [9, 4, 1] },
@@ -611,7 +531,7 @@ function MoodPizzaSection({ onAdd }: { onAdd: (id: number) => void }) {
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-5 animate-fade-in-up">
             {moods[selected].pizzas.map(id => {
               const pizza = PIZZAS.find(p => p.id === id)!;
-              return <PizzaCard key={id} pizza={pizza} onAdd={onAdd} />;
+              return <PizzaCard key={id} pizza={pizza} onAdd={onAdd} onOpenDetail={onOpenDetail} />;
             })}
           </div>
         )}
@@ -679,12 +599,14 @@ function DeliverySection() {
               <div className="grid grid-cols-2 gap-3">
                 {[
                   { zone: "Центр", price: "Бесплатно", min: "от 800 ₽" },
-                  { zone: "Районы", price: "99 ₽", min: "от 1200 ₽" },
-                ].map(z => (
-                  <div key={z.zone} className="bg-white/3 rounded-2xl p-4 border border-white/5">
-                    <div className="font-display font-bold text-ad-cream text-sm">{z.zone}</div>
-                    <div className="text-ad-orange font-bold text-base mt-1">{z.price}</div>
-                    <div className="text-ad-cream/40 text-xs mt-1">{z.min}</div>
+                  { zone: "Север/Юг", price: "100 ₽", min: "от 800 ₽" },
+                  { zone: "Запад/Восток", price: "150 ₽", min: "от 1000 ₽" },
+                  { zone: "Пригород", price: "200 ₽", min: "от 1200 ₽" },
+                ].map((z) => (
+                  <div key={z.zone} className="bg-white/3 rounded-xl p-3 border border-white/5">
+                    <div className="font-display font-semibold text-ad-cream text-sm">{z.zone}</div>
+                    <div className="text-ad-orange text-sm font-bold mt-1">{z.price}</div>
+                    <div className="text-ad-cream/40 text-xs mt-0.5 font-body">{z.min}</div>
                   </div>
                 ))}
               </div>
@@ -721,108 +643,6 @@ function ReviewsSection() {
               </div>
             </div>
           ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-/* ==================== PARTNERS ==================== */
-
-function PartnersSection() {
-  const [sent, setSent] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [form, setForm] = useState({ place: "", phone: "", email: "", comment: "" });
-
-  const submit = async () => {
-    if (!form.place.trim() || !form.phone.trim()) return;
-    setLoading(true);
-    try {
-      await productsApi.partner({ place_name: form.place, phone: form.phone, email: form.email, comment: form.comment });
-      setSent(true);
-    } catch {
-      setSent(true); // show success anyway, data may have saved
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <section id="partners" className="py-16 px-4">
-      <div className="max-w-7xl mx-auto">
-        <div className="text-center mb-12">
-          <div className="text-ad-gold text-sm font-bold font-display uppercase tracking-widest mb-3">🤝 Сотрудничество</div>
-          <h2 className="font-display font-black text-3xl sm:text-4xl text-ad-cream">Партнёрам ARTE DELI</h2>
-          <p className="text-ad-cream/55 font-body mt-3 max-w-xl mx-auto">Охлаждённые пиццы, кальцоне и сэндвичи — готовы на 60% для быстрой доготовки</p>
-        </div>
-
-        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-14">
-          {[
-            { num: "3000+", label: "единиц в месяц", desc: "Стабильный объём производства" },
-            { num: "60%", label: "готовности", desc: "Меньше времени на приготовление" },
-            { num: "🍕", label: "Предоставляем печь", desc: "ARTE DELI даёт оборудование" },
-            { num: "📢", label: "Рекламные материалы", desc: "Тейбл-тенты и маркетинг" },
-          ].map((s, i) => (
-            <div key={i} className="border-gradient rounded-3xl p-6 space-y-3 text-center animate-fade-in-up" style={{ animationDelay: `${i * 0.1}s` }}>
-              <div className="text-3xl font-black font-display text-ad-orange">{s.num}</div>
-              <div className="font-display font-bold text-ad-cream text-sm">{s.label}</div>
-              <div className="text-ad-cream/45 text-xs font-body">{s.desc}</div>
-            </div>
-          ))}
-        </div>
-
-        <div className="max-w-xl mx-auto">
-          <div className="bg-dark-card rounded-3xl p-8 border border-ad-orange/10">
-            <h3 className="font-display font-bold text-ad-cream text-xl mb-6">Оставить заявку</h3>
-            {sent ? (
-              <div className="text-center py-8 space-y-3 animate-scale-in">
-                <div className="text-5xl">✅</div>
-                <div className="font-display font-bold text-ad-cream text-xl">Заявка отправлена!</div>
-                <div className="text-ad-cream/60 font-body text-sm">Мы свяжемся с вами в течение 24 часов</div>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {[
-                  { key: "place", label: "Название заведения", placeholder: "Кафе «Уют»" },
-                  { key: "phone", label: "Телефон", placeholder: "+7 (999) 123-45-67" },
-                  { key: "email", label: "Email", placeholder: "info@cafe.ru" },
-                ].map(f => (
-                  <div key={f.key}>
-                    <label className="block text-xs font-display font-semibold text-ad-cream/60 mb-1.5 uppercase tracking-wider">{f.label}</label>
-                    <input
-                      className="input-dark w-full px-4 py-3 text-sm"
-                      placeholder={f.placeholder}
-                      value={form[f.key as keyof typeof form]}
-                      onChange={e => setForm({ ...form, [f.key]: e.target.value })}
-                    />
-                  </div>
-                ))}
-                <div>
-                  <label className="block text-xs font-display font-semibold text-ad-cream/60 mb-1.5 uppercase tracking-wider">Комментарий</label>
-                  <textarea
-                    className="input-dark w-full px-4 py-3 text-sm resize-none h-24"
-                    placeholder="Расскажите о вашем заведении..."
-                    value={form.comment}
-                    onChange={e => setForm({ ...form, comment: e.target.value })}
-                  />
-                </div>
-                <button
-                  onClick={submit}
-                  disabled={loading || !form.place.trim() || !form.phone.trim()}
-                  className="btn-primary w-full py-4 text-base mt-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {loading ? (
-                    <span className="flex items-center justify-center gap-2">
-                      <Icon name="Loader2" size={16} className="animate-spin" /> Отправляем...
-                    </span>
-                  ) : "Отправить заявку"}
-                </button>
-                <p className="text-ad-cream/30 text-xs text-center font-body">
-                  Также пишите на <a href="mailto:food@artedeli.ru" className="text-ad-orange hover:underline">food@artedeli.ru</a>
-                </p>
-              </div>
-            )}
-          </div>
         </div>
       </div>
     </section>
@@ -880,18 +700,16 @@ function CartPanel({ items, onClose, onRemove, onQtyChange, onCheckout }: {
               <div className="text-6xl">🍕</div>
               <div className="font-display font-bold text-ad-cream/60 text-lg">Корзина пуста</div>
               <p className="text-ad-cream/40 text-sm font-body">Добавьте вкусную пиццу из меню</p>
-              <button onClick={onClose} className="btn-primary px-6 py-3 text-sm mt-4">Выбрать пиццу</button>
+              <button onClick={onClose} className="btn-outline px-6 py-2 text-sm mt-2">В меню</button>
             </div>
           ) : (
             <>
               <div className="space-y-3">
                 {cartItems.map(item => (
-                  <div key={item.id} className="flex items-center gap-3 p-3 bg-white/3 rounded-2xl border border-white/5">
-                    <div className="text-3xl w-12 h-12 bg-ad-dark rounded-xl flex items-center justify-center flex-shrink-0">
-                      {item.emoji}
-                    </div>
+                  <div key={item.id} className="flex items-center gap-3 bg-white/3 rounded-2xl p-3 border border-white/5">
+                    <div className="text-3xl flex-shrink-0">{item.emoji}</div>
                     <div className="flex-1 min-w-0">
-                      <div className="font-display font-semibold text-ad-cream text-sm truncate">{item.name}</div>
+                      <div className="font-display font-semibold text-ad-cream text-sm leading-tight truncate">{item.name}</div>
                       <div className="text-ad-orange font-bold text-sm">{item.price * item.qty} ₽</div>
                     </div>
                     <div className="flex items-center gap-2">
@@ -1026,7 +844,7 @@ function Footer() {
           <div>
             <div className="font-display font-bold text-ad-cream mb-4 text-sm uppercase tracking-wider">О нас</div>
             <ul className="space-y-2">
-              {["История ARTE DELI", "Партнёрам", "Отзывы", "FAQ"].map(l => (
+              {["История ARTE DELI", "Отзывы", "FAQ"].map(l => (
                 <li key={l}><a href="#" className="text-ad-cream/50 hover:text-ad-cream text-sm font-body transition-colors">{l}</a></li>
               ))}
             </ul>
@@ -1086,9 +904,11 @@ function Toast({ message, onClose }: { message: string; onClose: () => void }) {
 /* ==================== MAIN PAGE ==================== */
 
 export default function Index() {
+  const { settings } = useSiteSettings();
   const [cart, setCart] = useState<{ id: number; qty: number }[]>([]);
   const [cartOpen, setCartOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [selectedPizza, setSelectedPizza] = useState<typeof PIZZAS[0] | null>(null);
 
   // Overlays
   const [showAuth, setShowAuth] = useState(false);
@@ -1097,7 +917,7 @@ export default function Index() {
   const [showCheckout, setShowCheckout] = useState(false);
   const [successOrderId, setSuccessOrderId] = useState<number | null>(null);
 
-  // Load products from backend on mount (seed data into local state if needed)
+  // Load products from backend on mount
   const [pizzas, setPizzas] = useState(PIZZAS);
   useEffect(() => {
     productsApi.list().then(res => {
@@ -1162,24 +982,36 @@ export default function Index() {
         onAuthClick={() => setShowAuth(true)}
         onCabinetClick={() => setShowCabinet(true)}
         onAdminClick={() => setShowAdmin(true)}
+        phone={settings.phone}
+        vkUrl={settings.vk_url}
       />
-      <Hero onOrder={() => { document.getElementById("menu")?.scrollIntoView({ behavior: "smooth" }); }} />
+      <Hero
+        onOrder={() => { document.getElementById("menu")?.scrollIntoView({ behavior: "smooth" }); }}
+        settings={settings}
+      />
 
       <div className="section-divider" />
       <Stories />
       <div className="section-divider" />
-      <MenuSection onAdd={addToCart} />
+      <MenuSection onAdd={addToCart} onOpenDetail={setSelectedPizza} />
       <div className="section-divider" />
       <PromoSection />
       <div className="section-divider" />
-      <MoodPizzaSection onAdd={addToCart} />
+      <MoodPizzaSection onAdd={addToCart} onOpenDetail={setSelectedPizza} />
       <div className="section-divider" />
       <DeliverySection />
       <div className="section-divider" />
       <ReviewsSection />
-      <div className="section-divider" />
-      <PartnersSection />
       <Footer />
+
+      {/* Product detail modal */}
+      {selectedPizza && (
+        <ProductModal
+          pizza={selectedPizza as Parameters<typeof ProductModal>[0]["pizza"]}
+          onClose={() => setSelectedPizza(null)}
+          onAdd={(id) => { addToCart(id); setSelectedPizza(null); }}
+        />
+      )}
 
       {/* Cart panel */}
       {cartOpen && (

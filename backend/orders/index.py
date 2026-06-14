@@ -199,36 +199,50 @@ def handler(event, context):
             items = get_order_items(cur, order_id)
             return resp(200, {"order": serialize_order(row, items)})
 
-        # PUT /orders/{id}/status
+        # PUT /orders/{id}/status — для сотрудников
         if method == "PUT" and "status" in parts:
             if not user or user["role"] not in ("admin","manager","cook","courier"):
                 return resp(403, {"error": "Нет доступа"})
             order_id = None
             for i, p in enumerate(parts):
                 if p == "status" and i > 0:
-                    try:
-                        order_id = int(parts[i-1])
-                    except Exception:
-                        pass
+                    try: order_id = int(parts[i-1])
+                    except Exception: pass
             if not order_id:
-                # try to extract from path
                 for p in parts:
-                    try:
-                        order_id = int(p)
-                        break
-                    except Exception:
-                        pass
+                    try: order_id = int(p); break
+                    except Exception: pass
             new_status = body.get("status")
             valid = ("processing","accepted","delivering","delivered","cancelled")
             if new_status not in valid:
                 return resp(400, {"error": f"Статус должен быть: {', '.join(valid)}"})
-            cur.execute(f"UPDATE {SCHEMA}.orders SET status=%s, updated_at=NOW() WHERE id=%s RETURNING id",
+            cur.execute(f"UPDATE {SCHEMA}.orders SET status=%s,updated_at=NOW() WHERE id=%s RETURNING id",
                         (new_status, order_id))
             if not cur.fetchone():
                 return resp(404, {"error": "Заказ не найден"})
             conn.commit()
             return resp(200, {"success": True, "status": new_status,
                               "status_label": STATUS_LABELS[new_status]})
+
+        # POST /orders/cancel — отмена клиентом (только processing)
+        if method == "POST" and "cancel" in parts:
+            if not user:
+                return resp(401, {"error": "Не авторизован"})
+            order_id = body.get("order_id")
+            if not order_id:
+                return resp(400, {"error": "Нет order_id"})
+            cur.execute(f"SELECT id,user_id,status FROM {SCHEMA}.orders WHERE id=%s", (int(order_id),))
+            row = cur.fetchone()
+            if not row:
+                return resp(404, {"error": "Заказ не найден"})
+            if row[1] != user["id"] and user["role"] not in ("admin","manager"):
+                return resp(403, {"error": "Нет доступа к этому заказу"})
+            if row[2] != "processing":
+                return resp(400, {"error": "Отменить можно только заказ в статусе «В обработке»"})
+            cur.execute(f"UPDATE {SCHEMA}.orders SET status='cancelled',updated_at=NOW() WHERE id=%s", (int(order_id),))
+            conn.commit()
+            return resp(200, {"success": True, "status": "cancelled",
+                              "status_label": STATUS_LABELS["cancelled"]})
 
         return resp(404, {"error": "Not found"})
     finally:

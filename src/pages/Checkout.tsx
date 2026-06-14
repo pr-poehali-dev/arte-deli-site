@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { orders as ordersApi } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
 import Icon from "@/components/ui/icon";
+import AddressInput from "@/components/AddressInput";
 
 interface CartItem {
   id: number; name: string; emoji: string; price: number; qty: number;
@@ -308,18 +309,27 @@ export default function Checkout({ cart, onSuccess, onBack }: Props) {
 
           {form.delivery_type === "delivery" && (
             <div className="space-y-3">
-              <Field id="address" label="Адрес" placeholder="Улица, дом"
-                value={form.address} onChange={v => setForm({...form, address: v})} error={errors.address} />
-              <div className="grid grid-cols-3 gap-3">
+              <div>
+                <label className="block text-xs font-display font-semibold text-ad-cream/50 mb-1.5 uppercase tracking-wider">
+                  Адрес доставки
+                </label>
+                <AddressInput
+                  value={form.address}
+                  onChange={v => setForm({...form, address: v})}
+                  placeholder="Начните вводить улицу..."
+                  error={errors.address}
+                />
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <Field id="apt" label="Кв." placeholder="12"
                   value={form.apartment} onChange={v => setForm({...form, apartment: v})} />
                 <Field id="ent" label="Подъезд" placeholder="1"
                   value={form.entrance} onChange={v => setForm({...form, entrance: v})} />
                 <Field id="flr" label="Этаж" placeholder="5"
                   value={form.floor} onChange={v => setForm({...form, floor: v})} />
+                <Field id="int" label="Домофон" placeholder="1234"
+                  value={form.intercom} onChange={v => setForm({...form, intercom: v})} />
               </div>
-              <Field id="int" label="Домофон" placeholder="1234#56"
-                value={form.intercom} onChange={v => setForm({...form, intercom: v})} />
             </div>
           )}
 
@@ -334,28 +344,13 @@ export default function Checkout({ cart, onSuccess, onBack }: Props) {
           )}
         </div>
 
-        {/* Time */}
-        <div className="bg-dark-card rounded-3xl p-6 space-y-4 border border-ad-orange/10">
-          <h3 className="font-display font-bold text-ad-cream text-base flex items-center gap-2">
-            <Icon name="Clock" size={16} className="text-ad-orange" /> Время
-          </h3>
-          <div className="grid grid-cols-2 gap-3">
-            {[
-              { v: "asap", label: "⚡ Как можно скорее", sub: "~45 минут" },
-              { v: "scheduled", label: "🕐 Ко времени", sub: "Укажу время" },
-            ].map(o => (
-              <button key={o.v} onClick={() => setForm({...form, delivery_time: o.v})}
-                className={`p-4 rounded-2xl border text-center transition-all ${
-                  form.delivery_time === o.v
-                    ? "bg-ad-orange/20 border-ad-orange text-ad-orange"
-                    : "bg-white/3 border-white/10 text-ad-cream/70 hover:border-ad-orange/30"
-                }`}>
-                <div className="font-display font-bold text-sm">{o.label}</div>
-                <div className="text-xs opacity-60 mt-1">{o.sub}</div>
-              </button>
-            ))}
+        {/* Time info */}
+        {form.delivery_type === "delivery" && (
+          <div className="flex items-center gap-3 px-5 py-3 bg-ad-orange/8 rounded-2xl border border-ad-orange/15">
+            <Icon name="Clock" size={16} className="text-ad-gold flex-shrink-0" />
+            <span className="text-ad-cream/70 text-sm font-body">Доставка <strong className="text-ad-cream">~45 минут</strong> · ежедневно 10:00–22:00</span>
           </div>
-        </div>
+        )}
 
         {/* Payment */}
         <div className="bg-dark-card rounded-3xl p-6 space-y-4 border border-ad-orange/10">

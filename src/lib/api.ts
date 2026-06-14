@@ -14,14 +14,18 @@ async function call(
   qs?: Record<string, string>
 ): Promise<unknown> {
   const url = new URL(URLS[fn]);
-  if (qs) Object.entries(qs).forEach(([k, v]) => url.searchParams.set(k, v));
+  // _action всегда в query string
   if (action) url.searchParams.set("_action", action);
+  if (qs) Object.entries(qs).forEach(([k, v]) => { if (k !== "_action") url.searchParams.set(k, v); });
 
   const token = getToken();
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (token) headers["X-Auth-Token"] = token;
 
-  const body = data ? { ...data, _action: action } : undefined;
+  // _action тоже в body для POST/PUT
+  const body = (method !== "GET" && method !== "DELETE" && data !== undefined)
+    ? { ...data, ...(action ? { _action: action } : {}) }
+    : undefined;
 
   const res = await fetch(url.toString(), {
     method,
@@ -29,14 +33,16 @@ async function call(
     body: body ? JSON.stringify(body) : undefined,
   });
 
-  const json = await res.json();
+  let json: unknown;
+  try { json = await res.json(); } catch { json = {}; }
+
   if (!res.ok && res.status !== 401) {
-    throw new Error(json.error || `HTTP ${res.status}`);
+    throw new Error((json as { error?: string }).error || `HTTP ${res.status}`);
   }
   return json;
 }
 
-// ─── AUTH ────────────────────────────────────────────────────────────────────
+// ─── AUTH ─────────────────────────────────────────────────────────────────────
 export const auth = {
   sendOtp: (phone: string) =>
     call("auth", "POST", "send-otp", { phone }) as Promise<{ success: boolean; dev_code?: string; phone: string }>,
@@ -57,10 +63,10 @@ export const auth = {
   } | { error: string }>,
 
   updateProfile: (data: Partial<ProfileUpdate>) =>
-    call("auth", "POST", "profile", data) as Promise<{ success: boolean }>,
+    call("auth", "POST", "profile", data as Record<string, unknown>) as Promise<{ success: boolean }>,
 };
 
-// ─── PRODUCTS ────────────────────────────────────────────────────────────────
+// ─── PRODUCTS ─────────────────────────────────────────────────────────────────
 export const products = {
   list: (category?: string) =>
     call("products", "GET", null, undefined, category ? { category } : undefined) as Promise<{
@@ -75,12 +81,9 @@ export const products = {
 
   checkPromo: (code: string, subtotal: number) =>
     call("products", "POST", "check-promo", { code, subtotal }) as Promise<PromoCheckResult>,
-
-  partner: (data: PartnerData) =>
-    call("products", "POST", "partner", data as unknown as Record<string, unknown>) as Promise<{ success: boolean; id: number }>,
 };
 
-// ─── ORDERS ──────────────────────────────────────────────────────────────────
+// ─── ORDERS ───────────────────────────────────────────────────────────────────
 export const orders = {
   create: (data: CreateOrderData) =>
     call("orders", "POST", null, data as unknown as Record<string, unknown>) as Promise<{
@@ -93,57 +96,71 @@ export const orders = {
   get: (id: number) =>
     call("orders", "GET", String(id)) as Promise<{ order: Order }>,
 
-  updateStatus: (id: number, status: OrderStatus) =>
-    call("orders", "PUT", "status", { status }, { id: String(id) }) as Promise<{ success: boolean }>,
+  cancel: (orderId: number) =>
+    call("orders", "POST", null, { order_id: orderId }, { _action: "cancel" }) as Promise<{
+      success: boolean; status: string;
+    }>,
 };
 
-// ─── ADMIN ───────────────────────────────────────────────────────────────────
+// ─── ADMIN ────────────────────────────────────────────────────────────────────
 export const admin = {
   dashboard: () =>
     call("admin", "GET", "dashboard") as Promise<DashboardData>,
 
+  // Заказы
   orders: (status?: string, search?: string) => {
-    const qs: Record<string, string> = { _action: "orders" };
+    const qs: Record<string, string> = {};
     if (status) qs.status = status;
     if (search) qs.search = search;
     return call("admin", "GET", "orders", undefined, qs) as Promise<{ orders: Order[]; total: number }>;
   },
 
-  updateOrderStatus: (id: number, status: OrderStatus) =>
-    call("admin", "PUT", "orders", { status }, { id: String(id), sub: "status" }) as Promise<{ success: boolean }>,
+  updateOrderStatus: (orderId: number, status: OrderStatus) =>
+    call("admin", "POST", "order_status", { order_id: orderId, status }) as Promise<{ success: boolean }>,
 
+  // Товары
   products: () =>
     call("admin", "GET", "products") as Promise<{ products: Product[] }>,
 
   updateProduct: (id: number, data: Partial<Product>) =>
-    call("admin", "PUT", "products", { ...data, id }) as Promise<{ success: boolean }>,
+    call("admin", "POST", "product_update", { ...data, id }) as Promise<{ success: boolean }>,
 
+  createProduct: (data: Partial<Product>) =>
+    call("admin", "POST", "product_create", data as unknown as Record<string, unknown>) as Promise<{ success: boolean; id: number }>,
+
+  // Акции
   promos: () =>
     call("admin", "GET", "promos") as Promise<{ promos: Promo[] }>,
 
   createPromo: (data: Partial<Promo>) =>
-    call("admin", "POST", "promos", data as unknown as Record<string, unknown>) as Promise<{ success: boolean; id: number }>,
+    call("admin", "POST", "promo_create", data as unknown as Record<string, unknown>) as Promise<{ success: boolean; id: number }>,
 
   updatePromo: (id: number, data: Partial<Promo>) =>
-    call("admin", "PUT", "promos", { ...data, id }) as Promise<{ success: boolean }>,
+    call("admin", "POST", "promo_update", { ...data, id }) as Promise<{ success: boolean }>,
 
-  partners: () =>
-    call("admin", "GET", "partners") as Promise<{ partners: PartnerRequest[] }>,
-
-  updatePartnerStatus: (id: number, status: string) =>
-    call("admin", "PUT", "partners", { status, id }) as Promise<{ success: boolean }>,
-
+  // Клиенты
   users: () =>
     call("admin", "GET", "users") as Promise<{ users: AdminUser[] }>,
 
+  // Stories
   stories: () =>
     call("admin", "GET", "stories") as Promise<{ stories: Story[] }>,
 
+  createStory: (data: Partial<Story>) =>
+    call("admin", "POST", "story_create", data as unknown as Record<string, unknown>) as Promise<{ success: boolean; id: number }>,
+
   updateStory: (id: number, data: Partial<Story>) =>
-    call("admin", "PUT", "stories", { ...data, id }) as Promise<{ success: boolean }>,
+    call("admin", "POST", "story_update", { ...data, id }) as Promise<{ success: boolean }>,
+
+  // Настройки сайта
+  getSettings: () =>
+    call("admin", "GET", "settings") as Promise<{ settings: Record<string, string> }>,
+
+  updateSettings: (settings: Record<string, string>) =>
+    call("admin", "POST", "settings_update", { settings }) as Promise<{ success: boolean; updated: number }>,
 };
 
-// ─── TYPES ───────────────────────────────────────────────────────────────────
+// ─── TYPES ────────────────────────────────────────────────────────────────────
 export interface Product {
   id: number; name: string; description: string; composition: string;
   price: number; category: string; size: string; emoji: string;
@@ -199,15 +216,6 @@ export interface CreateOrderData {
   comment?: string; delivery_time?: string; payment_method?: string; promo_code?: string;
 }
 
-export interface PartnerData {
-  place_name: string; phone: string; email?: string; comment?: string;
-}
-
-export interface PartnerRequest {
-  id: number; place_name: string; phone: string; email: string | null;
-  comment: string | null; status: string; created_at: string;
-}
-
 export interface AdminUser {
   id: number; phone: string; name: string | null; email: string | null;
   birth_date: string | null; role: string; created_at: string;
@@ -216,23 +224,23 @@ export interface AdminUser {
 export interface DashboardData {
   stats: {
     total_orders: number; revenue: number; total_clients: number;
-    new_orders: number; new_partners: number;
+    new_orders: number; today_orders: number; today_revenue: number;
   };
-  recent_orders: { id: number; name: string; phone: string; status: string; total: number; created_at: string }[];
+  recent_orders: { id: number; name: string; phone: string; status: string; total: number; delivery_type: string; created_at: string }[];
 }
 
 export const STATUS_LABELS: Record<OrderStatus, string> = {
-  processing: "Принимается",
-  accepted: "Готовится",
+  processing: "В обработке",
+  accepted:   "Готовится",
   delivering: "Курьер в пути",
-  delivered: "Доставлен",
-  cancelled: "Отменён",
+  delivered:  "Доставлен",
+  cancelled:  "Отмена",
 };
 
 export const STATUS_EMOJI: Record<OrderStatus, string> = {
   processing: "⏳",
-  accepted: "👨‍🍳",
+  accepted:   "👨‍🍳",
   delivering: "🛵",
-  delivered: "✅",
-  cancelled: "❌",
+  delivered:  "✅",
+  cancelled:  "❌",
 };
