@@ -1,0 +1,21 @@
+{
+  "tests": [
+    {
+      "name": "GET /orders/ unauthorized",
+      "method": "GET",
+      "path": "/",
+      "expectedStatus": 401,
+      "expectedBody": {"error": "Не авторизован"},
+      "bodyMatcher": "partial"
+    },
+    {
+      "name": "POST /orders/ empty cart",
+      "method": "POST",
+      "path": "/",
+      "body": {"customer_name": "Test", "customer_phone": "+79991234567", "items": []},
+      "expectedStatus": 400,
+      "expectedBody": {"error": "Корзина пуста"},
+      "bodyMatcher": "partial"
+    }
+  ]
+}

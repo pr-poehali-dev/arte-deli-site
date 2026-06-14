@@ -1,0 +1,12 @@
+{
+  "tests": [
+    {
+      "name": "GET /admin/dashboard unauthorized",
+      "method": "GET",
+      "path": "/dashboard",
+      "expectedStatus": 403,
+      "expectedBody": {"error": "Нет доступа. Требуется роль сотрудника."},
+      "bodyMatcher": "partial"
+    }
+  ]
+}

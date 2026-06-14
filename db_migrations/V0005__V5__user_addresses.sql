@@ -1,0 +1,1 @@
+CREATE TABLE IF NOT EXISTS t_p97754588_arte_deli_site.user_addresses (id SERIAL PRIMARY KEY, user_id INTEGER, address TEXT NOT NULL, apartment VARCHAR(20), entrance VARCHAR(10), floor VARCHAR(10), intercom VARCHAR(20), is_default BOOLEAN DEFAULT FALSE, created_at TIMESTAMPTZ DEFAULT NOW())

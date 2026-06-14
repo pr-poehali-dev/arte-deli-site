@@ -1,0 +1,46 @@
+{
+  "tests": [
+    {
+      "name": "GET /products/ list",
+      "method": "GET",
+      "path": "/",
+      "expectedStatus": 200,
+      "expectedBody": {"products": []},
+      "bodyMatcher": "partial"
+    },
+    {
+      "name": "GET /products/promos",
+      "method": "GET",
+      "path": "/promos",
+      "expectedStatus": 200,
+      "expectedBody": {"promos": []},
+      "bodyMatcher": "partial"
+    },
+    {
+      "name": "GET /products/stories",
+      "method": "GET",
+      "path": "/stories",
+      "expectedStatus": 200,
+      "expectedBody": {"stories": []},
+      "bodyMatcher": "partial"
+    },
+    {
+      "name": "POST /products/check-promo invalid",
+      "method": "POST",
+      "path": "/check-promo",
+      "body": {"code": "INVALID123", "subtotal": 1000},
+      "expectedStatus": 404,
+      "expectedBody": {"error": "Промокод не найден или недействителен"},
+      "bodyMatcher": "partial"
+    },
+    {
+      "name": "POST /products/partner",
+      "method": "POST",
+      "path": "/partner",
+      "body": {"place_name": "Кафе Тест", "phone": "+79991234567", "email": "test@test.ru"},
+      "expectedStatus": 201,
+      "expectedBody": {"success": true},
+      "bodyMatcher": "partial"
+    }
+  ]
+}

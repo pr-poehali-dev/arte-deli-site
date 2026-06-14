@@ -1,0 +1,1 @@
+CREATE TABLE IF NOT EXISTS t_p97754588_arte_deli_site.order_items (id SERIAL PRIMARY KEY, order_id INTEGER, product_id INTEGER, product_name VARCHAR(100) NOT NULL, product_emoji VARCHAR(10) DEFAULT '🍕', price INTEGER NOT NULL, quantity INTEGER NOT NULL DEFAULT 1, total INTEGER NOT NULL)
